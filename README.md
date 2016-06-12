@@ -111,5 +111,36 @@ log-slave-updates
 default-character-set=utf8
 socket=/var/lib/mysql/mysql.sock
 ```
+MySQL配置my.cnf 优化报错
+
+** Mysql参数优化对于新手来讲，是比较难懂的东西，其实这个参数优化，是个很复杂的东西，对于不同的网站，及其在线量，访问量，帖子数量，网络情况，以及机器硬件配置都有关系，优化不可能一次性完成，需要不断的观察以及调试，才有可能得到最佳效果。**
+
+个人在配置这个时候碰到很多的问题：
+
+比如出现配置完。启动报错：
+```
+Starting MySQL...The server quit without updating PID file (/opt/mysql/data/rekfan.pid).[失败]
+可参考这篇：http://blog.rekfan.com/articles/186.html
+我的问题解决是把自己配置定义的pid 
+pid-file=/opt/mysql/log/mysql.pid
+注释掉，让默认去访问。
+因为启动/etc/init.d/mysql 下面的脚本 rpm安装的默认路径在/var/lib/mysql/mysql-2.pid
+
+还有报错：
+
+报出异常Can 't connect to local MySQL server through socket '/var/lib/mysql/mysql.sock '(2) "
+打开错误日志/opt/mysql/log/error.log看到如下内容：
+140417  7:30:38 [ERROR] Can't start server: Bind on TCP/IP port: Cannot assign requested address  
+140417  7:30:38 [ERROR] Do you already have another mysqld server running on port: 3306 ?g  
+140417  7:30:38 [ERROR] Aborting  
+端口占用
+kill进程重新启动。
+添加了这条：
+socket=/var/lib/mysql/mysql.sock
 
 
+修改配置文件：先cp
+
+cp /usr/share/mysql/my-default.cnf /etc/my.cnf
+然后配置/etc/my.cnf
+```
