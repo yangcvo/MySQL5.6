@@ -112,4 +112,320 @@ default-character-set=utf8
 socket=/var/lib/mysql/mysql.sock
 ```
 
+##MySQL主从详细配置
 
+**Mysql作为目前世界上使用最广泛的免费数据库，相信所有从事系统运维的工程师都一定接触过。但在实际的生产环境中，由单台Mysql作为独立的数据库是完全不能满足实际需求的，无论是在安全性，高可用性以及高并发等各个方面。**
+
+**因此，一般来说都是通过 主从复制（Master-Slave）的方式来同步数据，再通过读写分离（MySQL-Proxy）来提升数据库的并发负载能力 这样的方案来进行部署与实施的。**
+
+```
+MySQL主从同步的作用 
+1、可以作为一种备份机制，相当于热备份 
+2、可以用来做读写分离，均衡数据库负载 
+MySQL主从同步的步骤 
+一、准备操作 
+1、主从数据库版本一致，建议版本5.5以上 
+2、主从数据库数据一致 
+
+
+如下图所示：
+
+下面是我在实际工作过程中所整理的笔记，在此分享出来，以供大家参考。
+
+一、MySQL的安装与配置
+具体的安装过程，建议参考我的这一篇文章：
+值得一提的是，我的安装过程都是源码包编译安装的，并且所有的配置与数据等都统一规划到了/opt/mysql目录中，因此在一台服务器上安装完成以后，可以将整个mysql目录打包，然后传到其它服务器上解包，便可立即使用。
+二、MySQL主从复制
+场景描述：
+主数据库服务器：192.168.1.170，MySQL已经安装，并且无应用数据。
+从数据库服务器：192.168.1.171，MySQL已经安装，并且无应用数据。
+
+2.1 主服务器上进行的操作
+启动mysql服务
+
+root@mysql mysql]# /etc/init.d/mysql start
+Starting MySQL. SUCCESS!
+
+打开主机A的my.cnf，输入
+
+log_bin=/var/lib/mysql/mysql-bin.log    #确保此文件可写
+read-only       =0  #主机，读写都可以
+binlog-do-db    =yjk   #需要备份数据，多个写多行
+binlog-ignore-db=mysql #不需要备份的数据库，多个写多行
+character_set_server=utf8                            #写入的数据到MySQL中数据为防止中文乱码。
+lower_case_table_names=1                             #这样MySQL 将在创建与查找时将所有的表名自动转换为小写字符
+character_set_client=utf8                            #集群写入的数据到MySQL中数据为防止中文乱码。
+collation-server=utf8_general_ci
+
+这里我在之前新创建了个数据库。我需要备份的数据。
+
+打开从机B的my.cnf，输入
+
+server-id               = 2
+log_bin                 = /var/lib/mysql/mysql-bin.log
+master-host     =192.168.1.170
+master-user     =backup
+master-pass     =backup
+master-port     =3306
+master-connect-retry=60 #如果从服务器发现主服务器断掉，重新连接的时间差(秒)
+replicate-do-db =test #只复制某个库
+replicate-ignore-db=mysql #不复制某个库
+
+配置好保存。
+
+同步数据库
+有多种方法，我说最笨的一种，先mysqldump导出主机A的数据yjk为 yjk.sql
+然后在，从机B上建立数据库yjk，mysql导入 yjk.sql到yjk库中
+先重启主机A的mysql，再重启从机B的mysql
+
+通过命令行登录管理MySQL服务器
+[root@mysql mysql]# mysql -uroot -p’new-password'
+Warning: Using a password on the command line interface can be insecure.
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 1
+Server version: 5.6.20-log MySQL Community Server (GPL)
+
+Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+
+授权给从数据库服务器192.168.11.171
+
+mysql> GRANT REPLICATION SLAVE ON *.*to 'backup'@'192.168.1.171' identified by 'backup';
+Query OK, 0 rows affected (0.02 sec)
+
+查询主数据库状态
+
+1 row in set (0.00 sec)
+
+mysql>  show master status;
++------------------+----------+--------------+------------------+-------------------+
+| File             | Position | Binlog_Do_DB | Binlog_Ignore_DB | Executed_Gtid_Set |
++------------------+----------+--------------+------------------+-------------------+
+| mysql-bin.000008 |      120 | yjk          | mysql            |                   |
++------------------+----------+--------------+------------------+-------------------+
+1 row in set (0.00 sec)
+
+mysql>  show master status\G;
+*************************** 1. row ***************************
+             File: mysql-bin.000008
+         Position: 120
+     Binlog_Do_DB: yjk
+ Binlog_Ignore_DB: mysql
+Executed_Gtid_Set:
+1 row in set (0.00 sec)
+
+
+
+记录下 FILE 及 Position 的值，在后面进行从服务器操作的时候需要用到。
+
+
+
+
+2.2 配置从服务器
+修改从服务器的配置文件/etc/my.cnf
+将 server-id = 1修改为 server-id = 10，并确保这个ID没有被别的MySQL服务所使用。
+启动mysql服务
+[root@mysql-2 log]# /etc/init.d/mysql stop
+Shutting down MySQL.. SUCCESS!
+[root@mysql-2 log]# /etc/init.d/mysql start
+Starting MySQL. SUCCESS!
+
+通过命令行登录管理MySQL服务器
+bin/mysql -uroot -p'new-password'
+
+执行同步SQL语句
+mysql> change master to
+master_host=’192.168.10.130’,
+master_user=’rep1’,
+master_password=’password’,
+master_log_file=’mysql-bin.000005’,
+master_log_pos=261;
+
+这里同步数据：提示我报错；ERROR 1198 (HY000): This operation cannot be performed with a running slave; run STOP SLAVE first
+
+网上看了MySQL配置master/slave常用命令，需要先停止slave。 
+
+mysql> show slave status;
++----------------+---------------+-------------+-------------+---------------+-----------------+---------------------+------------------------+---------------+-----------------------+------------------+-------------------+-----------------+---------------------+--------------------+------------------------+-------------------------+-----------------------------+------------+------------+--------------+---------------------+-----------------+-----------------+----------------+---------------+--------------------+--------------------+--------------------+-----------------+-------------------+----------------+-----------------------+-------------------------------+---------------+-----------------------------------------------------------------------------------------------------------------------+----------------+----------------+-----------------------------+------------------+-------------+----------------------------+-----------+---------------------+-----------------------------------------------------------------------------+--------------------+-------------+-------------------------+--------------------------+----------------+--------------------+--------------------+-------------------+---------------+
+| Slave_IO_State | Master_Host   | Master_User | Master_Port | Connect_Retry | Master_Log_File | Read_Master_Log_Pos | Relay_Log_File         | Relay_Log_Pos | Relay_Master_Log_File | Slave_IO_Running | Slave_SQL_Running | Replicate_Do_DB | Replicate_Ignore_DB | Replicate_Do_Table | Replicate_Ignore_Table | Replicate_Wild_Do_Table | Replicate_Wild_Ignore_Table | Last_Errno | Last_Error | Skip_Counter | Exec_Master_Log_Pos | Relay_Log_Space | Until_Condition | Until_Log_File | Until_Log_Pos | Master_SSL_Allowed | Master_SSL_CA_File | Master_SSL_CA_Path | Master_SSL_Cert | Master_SSL_Cipher | Master_SSL_Key | Seconds_Behind_Master | Master_SSL_Verify_Server_Cert | Last_IO_Errno | Last_IO_Error                                                                                                         | Last_SQL_Errno | Last_SQL_Error | Replicate_Ignore_Server_Ids | Master_Server_Id | Master_UUID | Master_Info_File           | SQL_Delay | SQL_Remaining_Delay | Slave_SQL_Running_State                                                     | Master_Retry_Count | Master_Bind | Last_IO_Error_Timestamp | Last_SQL_Error_Timestamp | Master_SSL_Crl | Master_SSL_Crlpath | Retrieved_Gtid_Set | Executed_Gtid_Set | Auto_Position |
++----------------+---------------+-------------+-------------+---------------+-----------------+---------------------+------------------------+---------------+-----------------------+------------------+-------------------+-----------------+---------------------+--------------------+------------------------+-------------------------+-----------------------------+------------+------------+--------------+---------------------+-----------------+-----------------+----------------+---------------+--------------------+--------------------+--------------------+-----------------+-------------------+----------------+-----------------------+-------------------------------+---------------+-----------------------------------------------------------------------------------------------------------------------+----------------+----------------+-----------------------------+------------------+-------------+----------------------------+-----------+---------------------+-----------------------------------------------------------------------------+--------------------+-------------+-------------------------+--------------------------+----------------+--------------------+--------------------+-------------------+---------------+
+|                | 192.168.1.170 |             |        3306 |            60 |                 |                   4 | mysql-relay-bin.000005 |             4 |                       | No               | Yes               |                 |                     |                    |                        |                         |                             |          0 |            |            0 |                 120 |             120 | None            |                |             0 | No                 |                    |                    |                 |                   |                |                     0 | No                            |          1593 | Fatal error: Invalid (empty) username when attempting to connect to the master server. Connection attempt terminated. |              0 |                |                             |                0 |             | /var/lib/mysql/master.info |         0 |                NULL | Slave has read all relay log; waiting for the slave I/O thread to update it |              86400 |             | 160612 16:56:22         |                          |                |                    |                    |                   |             0 |
++----------------+---------------+-------------+-------------+---------------+-----------------+---------------------+------------------------+---------------+-----------------------+------------------+-------------------+-----------------+---------------------+--------------------+------------------------+-------------------------+-----------------------------+------------+------------+--------------+---------------------+-----------------+-----------------+----------------+---------------+--------------------+--------------------+--------------------+-----------------+-------------------+----------------+-----------------------+-------------------------------+---------------+-----------------------------------------------------------------------------------------------------------------------+----------------+----------------+-----------------------------+------------------+-------------+----------------------------+-----------+---------------------+-----------------------------------------------------------------------------+--------------------+-------------+-------------------------+--------------------------+----------------+--------------------+--------------------+-------------------+---------------+
+1 row in set (0.00 sec)
+
+这里我看到了我之前配置的，所以在配置就会报刚才那个错误。
+
+这里只需
+mysql> stop slave;
+Query OK, 0 rows affected (0.01 sec)
+
+
+mysql> change master to
+    -> master_host='192.168.1.170',
+    -> master_user='backup',
+    -> master_password='backup',
+    -> master_log_file='mysql-bin.000008',
+    -> master_log_pos=120;
+Query OK, 0 rows affected, 2 warnings (0.01 sec)
+
+
+
+正确执行后启动Slave同步进程
+mysql> start slave;
+
+mysql> start slave;
+Query OK, 0 rows affected (0.01 sec)
+
+
+
+主从同步检查：
+
+
+
+从：
+mysql> show slave status\G
+*************************** 1. row ***************************
+               Slave_IO_State: Waiting for master to send event
+                  Master_Host: 192.168.1.170
+                  Master_User: backup
+                  Master_Port: 3306
+                Connect_Retry: 60
+              Master_Log_File: mysql-bin.000008
+          Read_Master_Log_Pos: 120
+               Relay_Log_File: mysql-relay-bin.000002
+                Relay_Log_Pos: 279
+        Relay_Master_Log_File: mysql-bin.000008
+             Slave_IO_Running: Yes
+            Slave_SQL_Running: Yes
+              Replicate_Do_DB:
+          Replicate_Ignore_DB:
+           Replicate_Do_Table:
+       Replicate_Ignore_Table:
+      Replicate_Wild_Do_Table:
+  Replicate_Wild_Ignore_Table:
+                   Last_Errno: 0
+                   Last_Error:
+                 Skip_Counter: 0
+          Exec_Master_Log_Pos: 120
+              Relay_Log_Space: 448
+              Until_Condition: None
+               Until_Log_File:
+                Until_Log_Pos: 0
+           Master_SSL_Allowed: No
+           Master_SSL_CA_File:
+           Master_SSL_CA_Path:
+              Master_SSL_Cert:
+            Master_SSL_Cipher:
+               Master_SSL_Key:
+        Seconds_Behind_Master: 0
+Master_SSL_Verify_Server_Cert: No
+                Last_IO_Errno: 0
+                Last_IO_Error:
+               Last_SQL_Errno: 0
+               Last_SQL_Error:
+  Replicate_Ignore_Server_Ids:
+             Master_Server_Id: 1
+                  Master_UUID: d4280377-2fe1-11e6-8b17-525400e91531
+             Master_Info_File: /var/lib/mysql/master.info
+                    SQL_Delay: 0
+          SQL_Remaining_Delay: NULL
+      Slave_SQL_Running_State: Slave has read all relay log; waiting for the slave I/O thread to update it
+           Master_Retry_Count: 86400
+                  Master_Bind:
+      Last_IO_Error_Timestamp:
+     Last_SQL_Error_Timestamp:
+               Master_SSL_Crl:
+           Master_SSL_Crlpath:
+           Retrieved_Gtid_Set:
+            Executed_Gtid_Set:
+                Auto_Position: 0
+1 row in set (0.00 sec)
+
+其中Slave_IO_Running 与 Slave_SQL_Running 的值都必须为YES，才表明状态正常。即YES状态，否则说明同步失败。 
+到这里，主从数据库设置工作已经完成，自己可以新建数据库和表，插入和修改数据，测试一下是否成功 .
+
+
+如果主服务器已经存在应用数据，则在进行主从复制时，需要做以下处理：
+(1)主数据库进行锁表操作，不让数据再进行写入动作
+mysql> FLUSH TABLES WITH READ LOCK;
+
+(2)查看主数据库状态
+mysql> show master status;
+
+
+//显示所有本机上的二进制日志
+mysql> SHOW MASTER LOGS;
+
+(3)复制数据文件
+将主服务器的数据文件（整个/var/lib/mysql 目录）复制到从服务器，建议通过tar归档压缩后再传到从服务器解压。  这里我写的目录是/var/lib/mysql 下面的 建议配置my.cnf 设置个/opt/mysql/data  单独存放数据。
+
+
+4)取消主数据库锁定
+mysql> UNLOCK TABLES;
+
+
+2.3 验证主从复制效果
+
+主服务器上的操作
+
+在主服务器上的表first_tb中插入记录
+mysql> insert into first_tb values (001,’myself’);
+Query Ok, 1 row affected (0.00 sec)
+
+
+
+在从服务器上查看
+
+[root@mysql-2 mysql]# mysql -uroot -pIhaozhuo_b313
+Warning: Using a password on the command line interface can be insecure.
+Welcome to the MySQL monitor.  Commands end with ; or \g.
+Your MySQL connection id is 8
+Server version: 5.6.20-log MySQL Community Server (GPL)
+
+Copyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.
+
+Oracle is a registered trademark of Oracle Corporation and/or its
+affiliates. Other names may be trademarks of their respective
+owners.
+
+Type 'help;' or '\h' for help. Type '\c' to clear the current input statement.
+
+mysql> show databases;
++--------------------+
+| Database           |
++--------------------+
+| information_schema |
+| data               |
+| mysql              |
+| performance_schema |
+| test               |
+| yjk                |
++--------------------+
+6 rows in set (0.00 sec)
+
+mysql> use yjk;
+Reading table information for completion of table and column names
+You can turn off this feature to get a quicker startup with -A
+
+Database changed
+mysql> show tables;
++---------------+
+| Tables_in_yjk |
++---------------+
+| first_tb      |
++---------------+
+1 row in set (0.00 sec)
+
+数据库first_db已经自动生成
+
+由此，整个MySQL主从复制的过程就完成了，接下来，我们进行MySQL读写分离的安装与配置。
+
+
+```
+如果感觉查看不方便，可以下载配置文档：MySQL主从复制（Master-Slave）实践
