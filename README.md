@@ -129,7 +129,7 @@ MySQL主从同步的步骤
 
 ```
 如下图所示：
-![image](https://github.com/yangcvo/MySQL5.6/mysql-master-slave/mysql-master-slave-proxy.jpg) 
+![image](http://7xrthw.com1.z0.glb.clouddn.com/githubmysql-master-slave-proxy.jpg) 
 ```
 下面是我在实际工作过程中所整理的笔记，在此分享出来，以供大家参考。
 
@@ -347,10 +347,7 @@ Master_SSL_Verify_Server_Cert: No
             Executed_Gtid_Set:
                 Auto_Position: 0
 1 row in set (0.00 sec)
-```
-![image](http://7xrthw.com1.z0.glb.clouddn.com/githubmysql-master.jpg)
 
-```
 其中Slave_IO_Running 与 Slave_SQL_Running 的值都必须为YES，才表明状态正常。即YES状态，否则说明同步失败。 
 到这里，主从数据库设置工作已经完成，自己可以新建数据库和表，插入和修改数据，测试一下是否成功 .
 
@@ -432,5 +429,4 @@ mysql> show tables;
 
 
 ```
-![image](http://7xrthw.com1.z0.glb.clouddn.com/githubmysql-slave.jpg)
 如果感觉查看不方便，可以下载配置文档：MySQL主从复制（Master-Slave）实践
