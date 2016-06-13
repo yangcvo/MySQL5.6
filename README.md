@@ -430,3 +430,85 @@ mysql> show tables;
 
 ```
 如果感觉查看不方便，可以下载配置文档：MySQL主从复制（Master-Slave）实践
+
+
+##单独项目数据库MySQL my.cnf配置优化。
+
+```
+[client]
+port   = 3306
+socket = /opt/zbox/tmp/mysql/mysql.sock
+
+[mysqld]
+user       = nobody
+port       = 3306
+socket     = /opt/zbox/tmp/mysql/mysql.sock
+datadir    = /opt/zbox/data/mysql
+pid-file   = /opt/zbox/tmp/mysql/mysqld.pid
+log_error  = /opt/zbox/logs/mysql_error.log
+server-id  = 1
+
+bind-address 			= 127.0.0.1
+key_buffer              = 16M
+max_allowed_packet      = 1M
+table_open_cache        = 64
+sort_buffer_size        = 512K
+net_buffer_length       = 8K
+read_buffer_size        = 256K
+read_rnd_buffer_size    = 512K
+myisam_sort_buffer_size = 8M
+skip-external-locking
+default-storage-engine=MyISAM
+
+[mysqldump]
+quick
+max_allowed_packet = 16M
+
+[mysql]
+no-auto-rehash
+
+[isamchk]
+key_buffer       = 20M
+sort_buffer_size = 20M
+read_buffer      = 2M
+write_buffer     = 2M
+
+[myisamchk]
+key_buffer       = 20M
+sort_buffer_size = 20M
+read_buffer      = 2M
+write_buffer     = 2M
+
+[mysqlhotcopy]
+interactive-timeout
+
+```
+
+##mysql 远程连接不上，由于bind-address问题
+
+```
+MySQL远程连接ERROR 2003 (HY000):Can't connect to MySQL server on'XXXXX'(111) 的问题
+Can t connect to MySQL server on 16报错。
+刚安装了MySQL服务器，使用远程管理工具总是连接不上，因为知道mysql的默认端口是3306，于是使用telnet连接这个端口，
+telnet 192.168.1.10 3306
+
+还是连接不上，于是怀疑是防火墙问题，便将防火墙关掉，
+service iptables stop
+再次telnet，还是没办法连上这个端口，然后通过netstat查看3306的端口状态是怎么样的
+netstat -apn|grep 3360
+终于发现了一个比较奇怪的东西
+tcp        0      0 127.0.0.1:3306            0.0.0.0:*               LISTEN      3783/mysqld
+上面标红的地方，监听端口正常，但却绑定了本地回旋地址，难怪总是连接不上，于是查了下资料，找到了解决办法：
+修改mysql的配置文件/etc/mysql/my.conf，将bind-address后面增加远程访问IP地址或者禁掉这句话就可以让远程机登陆访问了。
+
+bind-address = 127.0.0.1
+
+注释掉。
+
+记得要重启mysql服务哦
+service mysql restart
+
+就可以登录了。
+
+
+```
