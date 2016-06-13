@@ -58,7 +58,7 @@ ACID 事务 支持构建安全可靠的关键业务应用程序
 
 ## RPM安装5.6 
 
-**请参考链接：http://www.sysopen.cn/20160612/
+**请参考链接：http://www.sysopen.cn/20160612/**
 
 ## my.cnf 优化配置
 ```
@@ -127,10 +127,10 @@ MySQL主从同步的步骤
 1、主从数据库版本一致，建议版本5.5以上 
 2、主从数据库数据一致 
 
-
+```
 如下图所示：
-![imager] 
-
+![image](https://github.com/yangcvo/MySQL5.6/mysql-master-slave/mysql-master-slave-proxy.jpg) 
+```
 下面是我在实际工作过程中所整理的笔记，在此分享出来，以供大家参考。
 
 一、MySQL的安装与配置
