@@ -58,7 +58,153 @@ ACID 事务 支持构建安全可靠的关键业务应用程序
 
 ## RPM安装5.6 
 
-**请参考链接：http://www.sysopen.cn/20160612/**
+```
+RPM方式安装MySQL5.6
+
+可关注参考 https://github.com/yangcvo/MySQL5.6
+
+a. 检查MySQL及相关RPM包，是否安装，如果有安装，则移除（rpm –e 名称）
+     
+     [root@localhost ~]# rpm -qa | grep -i mysql mysql-libs-5.1.66-2.el6_3.x86_64
+     [root@localhost ~]# yum -y remove mysql-libs*
+
+b. 下载Linux对应的RPM包，如：CentOS6.4_64对应的RPM包，如下：
+
+    [root@localhost rpm]# ll
+    total 74364
+    -rw-r--r--. 1 root root 18442536 Dec 11 20:19 MySQL-client-5.6.15-1.el6.x86_64.rpm
+    -rw-r--r--. 1 root root  3340660 Dec 11 20:06 MySQL-devel-5.6.15-1.el6.x86_64.rpm
+    -rw-r--r--. 1 root root 54360600 Dec 11 20:03 MySQL-server-5.6.15-1.el6.x86_64.rpm
+
+c. 安装MySQL
+
+    [root@localhost rpm]# rpm -ivh MySQL-server-5.6.15-1.el6.x86_64.rpm
+ 如果安装不上，--nodeps —force 强制安装
+
+    [root@localhost rpm]# rpm -ivh MySQL-devel-5.6.15-1.el6.x86_64.rpm
+
+    [root@localhost rpm]# rpm -ivh MySQL-client-5.6.15-1.el6.x86_64.rpm
+
+修改配置文件位置
+ 
+    [root@localhost rpm]# cp /usr/share/mysql/my-default.cnf /etc/my.cnf
+
+d. 初始化MySQL及设置密码
+
+    [root@localhost rpm]# /usr/bin/mysql_install_db
+
+    [root@localhost rpm]# service mysql start
+
+     [root@localhost rpm]# cat /root/.mysql_secret  #查看root账号密码
+
+    # The random password set for the root user at Wed Dec 11 23:32:50 2013 (local time): qKTaFZnl
+
+    [root@localhost ~]# mysql -uroot –pqKTaFZnl
+
+     mysql> SET PASSWORD = PASSWORD('123456');    #设置密码为123456
+
+     mysql> exit
+     [root@localhost ~]# mysql -uroot -p123456
+
+e. 允许远程登陆
+
+
+    mysql> use mysql;
+
+    mysql> select host,user,password from user;
+
+     +-----------------------+------+------------------------------------------+
+
+    | host     | user | password                                               |
+
+    +-----------------------+------+-------------------------------------------+
+
+    | localhost             | root | *6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9 |
+
+    | localhost.localdomain | root | *1237E2CE819C427B0D8174456DD83C47480D37E8 |
+
+
+    | 127.0.0.1             | root | *1237E2CE819C427B0D8174456DD83C47480D37E8 |
+
+
+    | ::1                   | root | *1237E2CE819C427B0D8174456DD83C47480D37E8 |
+
+    +-----------------------+------+-------------------------------------------+
+
+
+    mysql> update user set password=password('123456') where user='root';
+    设置MySQL新密码
+    mysql> update user set host='%' where user='root' and host='localhost';
+    设置所有IP都可以root登陆。这里我不建议这么做，只做内网网段访问即可。
+    mysql> flush privileges;
+    刷新权限。
+    mysql> exit
+     退出
+f. 设置开机自启动
+
+
+    [root@localhost ~]# chkconfig mysql on
+
+    [root@localhost ~]# chkconfig --list | grep mysql
+    mysql           0:off   1:off   2:on    3:on    4:on    5:on    6:off
+
+g. MySQL的默认安装位置
+
+     /var/lib/mysql/               #数据库目录
+     /usr/share/mysql              #配置文件目录
+     /usr/bin                     #相关命令目录
+     /etc/init.d/mysql              #启动脚本
+
+修改字符集和数据存储路径
+
+
+配置/etc/my.cnf文件,修改数据存放路径、mysql.sock路径以及默认编码utf-8.
+
+这里对/etc/my.cnf做了简单的配置。后期会讲my.cnf 配置优化
+   [html] view plain copy
+
+- [client]
+- password        = 123456
+- port            = 3306
+- default-character-set=utf8
+- [mysqld]
+- port            = 3306
+- character_set_server=utf8
+- character_set_client=utf8
+- collation-server=utf8_general_ci
+- #(注意linux下mysql安装完后是默认：表名区分大小写，列名不区分大小写； 0：区分大小写，1：不区分大小写)
+- lower_case_table_names=1
+- #(设置最大连接数，默认为 151，MySQL服务器允许的最大连接数16384; )
+- max_connections=1000
+- [mysql]
+- default-character-set = utf8
+
+查看字符集
+
+    show variables like '%collation%';
+
+    show variables like '%char%';
+
+初始化成功： 下面的初始化内容
+
+登录进去报错。
+
+这个报错事说密码没有设置。
+那我设置下密码看下。
+可使用SET PASSWORD命令修改root用户的密码，参考如下：
+
+    mysql> SET PASSWORD = PASSWORD('root123456');
+    Query OK, 0 rows affected (0.00 sec)
+    mysql> show databases;
+    +--------------------+
+    | Database           |
+    +--------------------+
+    | information_schema |
+    | mysql              |
+    | performance_schema |
+    | test               |
+    +--------------------+
+```
 
 ## my.cnf 优化配置
 ```
